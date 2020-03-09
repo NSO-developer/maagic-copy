@@ -1,0 +1,10 @@
+<ncs-package xmlns="http://tail-f.com/ns/ncs-packages">
+  <name>test-maagic-copy</name>
+  <package-version>1.0</package-version>
+  <description>Tester of maagic-copy</description>
+  <ncs-min-version>4.7</ncs-min-version>
+
+  <required-package>
+      <name>maagic-copy</name>
+  </required-package>
+</ncs-package>

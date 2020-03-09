@@ -12,12 +12,8 @@ testenv-start-extra:
 # magically work.
 
 testenv-test:
-	@echo "TODO: Fill in your tests here"
-# Some examples for how to run commands in the ncs_cli:
-#	$(MAKE) testenv-runcmd CMD="show packages"
-#	$(MAKE) testenv-runcmd CMD="request packages reload"
-# Multiple commands in a single session also works - great for configuring stuff:
-#	$(MAKE) testenv-runcmd CMD="configure\n set foo bar\n commit"
-# We can test for certain output by combining show commands in the CLI with for
-# example grep:
-#	$(MAKE) testenv-runcmd CMD="show configuration foo" | grep bar
+	$(MAKE) testenv-runcmd CMD="configure\n delete a\n commit"
+	$(MAKE) testenv-runcmd CMD="configure\n delete b\n commit"
+	$(MAKE) testenv-runcmd CMD="configure\n set b a foobar\n commit"
+	docker exec -t $(CNT_PREFIX)-nso bash -lc 'export PYTHONPATH=$$PYTHONPATH:/var/opt/ncs/packages/maagic-copy/python; python3 /var/opt/ncs/packages/test-maagic-copy/python/test_maagic_copy/main.py'
+	$(MAKE) testenv-runcmd CMD="show configuration b" | grep foobar
