@@ -105,7 +105,7 @@ check-nid-available:
 # We don't need this check from a strictly functional perspective as builds or
 # tests would fail anyway but by explicitly checking we can make some
 # guesstimates and provide hints to the user on what might be wrong.
-	echo "Checking NSO in Docker images are available..." \
+	@echo "Checking NSO in Docker images are available..." \
 		&& docker inspect $(NSO_IMAGE_PATH)cisco-nso-base:$(NSO_VERSION) >/dev/null 2>&1 \
 		|| (echo "ERROR: The docker image $(NSO_IMAGE_PATH)cisco-nso-base:$(NSO_VERSION) does not exist"; \
 			if [ -z "$(NSO_IMAGE_PATH)" ]; then \
