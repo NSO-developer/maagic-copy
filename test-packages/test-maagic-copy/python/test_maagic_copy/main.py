@@ -9,5 +9,5 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
     with ncs.maapi.single_write_trans('', 'system') as t:
         root = ncs.maagic.get_root(t)
-
-        maagic_copy(root.a, root.b)
+        maagic_copy(root.src, root.dst)
+        t.apply()

@@ -12,8 +12,19 @@ testenv-start-extra:
 # magically work.
 
 testenv-test:
-	$(MAKE) testenv-runcmd CMD="configure\n delete a\n commit"
-	$(MAKE) testenv-runcmd CMD="configure\n delete b\n commit"
-	$(MAKE) testenv-runcmd CMD="configure\n set b a foobar\n commit"
+	@echo "-- Cleaning out test data from CDB"
+	$(MAKE) testenv-runcmd CMD="configure\n delete src\n commit"
+	$(MAKE) testenv-runcmd CMD="configure\n delete dst\n commit"
+	@echo "-- Loading test data"
+	$(MAKE) testenv-loadconf FILE="test/input/simple.xml"
+	@echo "-- Running maagic_copy(src, dst)"
 	docker exec -t $(CNT_PREFIX)-nso bash -lc 'export PYTHONPATH=$$PYTHONPATH:/var/opt/ncs/packages/maagic-copy/python; python3 /var/opt/ncs/packages/test-maagic-copy/python/test_maagic_copy/main.py'
-	$(MAKE) testenv-runcmd CMD="show configuration b" | grep foobar
+	@echo "-- Saving output data"
+	$(MAKE) testenv-saveconfxml FILE="test/output/simple-src.xml" CONFPATH="src simple"
+	$(MAKE) testenv-saveconfxml FILE="test/output/simple-dst.xml" CONFPATH="dst simple"
+	@echo "-- Mangling data"
+	xmlstarlet edit -O -N c=http://tail-f.com/ns/config/1.0 -N x=http://example.com/test-maagic-copy --move "/c:config/x:src/x:simple" "/" --delete "/c:config" test/output/simple-src.xml > test/output/simple-mangled-src.xml
+	xmlstarlet edit -O -N c=http://tail-f.com/ns/config/1.0 -N x=http://example.com/test-maagic-copy --move "/c:config/x:dst/x:simple" "/" --delete "/c:config" test/output/simple-dst.xml > test/output/simple-mangled-dst.xml
+	@echo "-- Comparing src to dst"
+	diff -u test/output/simple-mangled-src.xml test/output/simple-mangled-dst.xml
+

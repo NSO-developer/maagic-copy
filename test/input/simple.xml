@@ -1,0 +1,16 @@
+<config xmlns="http://tail-f.com/ns/config/1.0">
+    <src xmlns="http://example.com/test-maagic-copy">
+        <simple>
+            <a-leaf>test-string</a-leaf>
+            <a-list>
+                <name>list-entry-1</name>
+            </a-list>
+            <a-list>
+                <name>list-entry-2</name>
+            </a-list>
+            <a-container>
+                <another-leaf>another-string</another-leaf>
+            </a-container>
+        </simple>
+    </src>
+</config>

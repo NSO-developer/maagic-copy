@@ -14,24 +14,40 @@ module test-maagic-copy {
   }
 
   description
-    "Bla bla...";
+    "A model for testing the maagic-copy package";
 
-  revision 2016-01-01 {
+  revision 2020-03-09 {
     description
       "Initial revision.";
   }
 
-  grouping copy-nodes {
-    leaf a {
-      type string;
+  grouping simple {
+    container simple {
+      leaf a-leaf {
+        type string;
+      }
+
+      list a-list {
+        key name;
+
+        leaf name {
+          type string;
+        }
+      }
+
+      container a-container {
+        leaf another-leaf {
+          type string;
+        }
+      }
     }
   }
 
-  container a {
-    uses copy-nodes;
+  container src {
+    uses simple;
   }
 
-  container b {
-    uses copy-nodes;
+  container dst {
+    uses simple;
   }
 }
