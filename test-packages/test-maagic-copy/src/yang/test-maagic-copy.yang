@@ -40,6 +40,15 @@ module test-maagic-copy {
           type string;
         }
       }
+
+      choice a-choice {
+        leaf first-choice {
+          type string;
+        }
+        leaf second-choice {
+          type string;
+        }
+      }
     }
   }
 

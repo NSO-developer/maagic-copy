@@ -11,6 +11,7 @@
             <a-container>
                 <another-leaf>another-string</another-leaf>
             </a-container>
+            <first-choice>my-first-choice</first-choice>
         </simple>
     </src>
 </config>
