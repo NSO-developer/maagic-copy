@@ -1,1 +1,4 @@
-* maagic copy
+* maagic copy - a tree copy function for Cisco NSO
+  In Cisco NSO, copying the data from one subtree to another isn't entirely straight forward. maagic copy is a Python module to make your life easier in case you need to copy data. It gets its name from NSOs Python library maagic.
+
+  TODO: how does this compare to the MAAPI call copy_tree ?
