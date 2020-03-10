@@ -156,12 +156,8 @@ def maagic_copy(a, b, service_copy=True, _is_first=True):
                     dst_node.create()
                 maagic_copy(src_node, dst_node, _is_first=False)
             elif isinstance(src_node, ncs.maagic.Choice):
-                # the Choice.get_value() method returns a Case, which we can copy recursively
-                c_value = src_node.get_value()
-                if c_value is None:
-                    dst_node = None
-                else:
-                    maagic_copy(c_value, dst_node, _is_first=False)
+                # No need to copy the choice itself as it follows implicitly from the present case children
+                pass
 
             elif isinstance(src_node, ncs.maagic.NonEmptyLeaf):
                 try:
