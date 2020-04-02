@@ -6,15 +6,15 @@ include nidpackage.mk
 testenv-start-extra:
 	@echo "Starting repository specific testenv"
 # Start extra things, for example a netsim container by doing:
-# docker run -td --name $(CNT_PREFIX)-my-netsim --network-alias mynetsim1 $(DOCKER_ARGS) $(IMAGE_PATH)my-netsim-image:$(DOCKER_TAG)
+# docker run -td --name $(CNT_PREFIX)-my-netsim --network-alias mynetsim1 $(DOCKER_ARGS) $(IMAGE_PATH)my-ned-repo/netsim:$(DOCKER_TAG)
 # Note how it becomes available under the name 'mynetsim1' from the NSO
 # container, i.e. you can set the device address to 'mynetsim1' and it will
 # magically work.
 
 testenv-test:
 	@echo "-- Cleaning out test data from CDB"
-	$(MAKE) testenv-runcmd CMD="configure\n delete src\n commit"
-	$(MAKE) testenv-runcmd CMD="configure\n delete dst\n commit"
+	$(MAKE) testenv-runcmdJ CMD="configure\n delete src\n commit"
+	$(MAKE) testenv-runcmdJ CMD="configure\n delete dst\n commit"
 	@echo "-- Loading test data"
 	$(MAKE) testenv-loadconf FILE="test/input/simple.xml"
 	@echo "-- Running maagic_copy(src, dst)"
@@ -28,3 +28,18 @@ testenv-test:
 	@echo "-- Comparing src to dst"
 	diff -u test/output/simple-mangled-src.xml test/output/simple-mangled-dst.xml
 
+
+
+testenv-loadconf:
+	@if [ -z "$(FILE)" ]; then echo "FILE variable must be set"; false; fi
+	@echo "Loading configuration $(FILE)"
+	@docker exec -t $(CNT_PREFIX)-nso bash -lc "mkdir -p test/$(shell echo $(FILE) | xargs dirname)"
+	@docker cp $(FILE) $(CNT_PREFIX)-nso:test/$(FILE)
+	@$(MAKE) testenv-runcmdJ CMD="configure\nload merge test/$(FILE)\ncommit"
+
+testenv-saveconfxml:
+	@if [ -z "$(FILE)" ]; then echo "FILE variable must be set"; false; fi
+	@echo "Saving configuration to $(FILE)"
+	docker exec -t $(CNT_PREFIX)-nso bash -lc "mkdir -p test/$(shell echo $(FILE) | xargs dirname)"
+	@$(MAKE) testenv-runcmdJ CMD="show configuration $(CONFPATH) | display xml | save test/$(FILE)"
+	@docker cp $(CNT_PREFIX)-nso:test/$(FILE) $(FILE)
