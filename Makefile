@@ -28,3 +28,18 @@ testenv-test:
 	@echo "-- Comparing src to dst"
 	diff -u test/output/simple-mangled-src.xml test/output/simple-mangled-dst.xml
 
+
+
+testenv-loadconf:
+	@if [ -z "$(FILE)" ]; then echo "FILE variable must be set"; false; fi
+	@echo "Loading configuration $(FILE)"
+	@docker exec -t $(CNT_PREFIX)-nso bash -lc "mkdir -p test/$(shell echo $(FILE) | xargs dirname)"
+	@docker cp $(FILE) $(CNT_PREFIX)-nso:test/$(FILE)
+	@$(MAKE) testenv-runcmdJ CMD="configure\nload merge test/$(FILE)\ncommit"
+
+testenv-saveconfxml:
+	@if [ -z "$(FILE)" ]; then echo "FILE variable must be set"; false; fi
+	@echo "Saving configuration to $(FILE)"
+	docker exec -t $(CNT_PREFIX)-nso bash -lc "mkdir -p test/$(shell echo $(FILE) | xargs dirname)"
+	@$(MAKE) testenv-runcmdJ CMD="show configuration $(CONFPATH) | display xml | save test/$(FILE)"
+	@docker cp $(CNT_PREFIX)-nso:test/$(FILE) $(FILE)
