@@ -122,13 +122,13 @@ testenv-loadconf:
 	@echo "Loading configuration $(FILE)"
 	@docker exec -t $(CNT_PREFIX)-nso bash -lc "mkdir -p test/$(shell echo $(FILE) | xargs dirname)"
 	@docker cp $(FILE) $(CNT_PREFIX)-nso:test/$(FILE)
-	@$(MAKE) testenv-runcmd CMD="configure\nload merge test/$(FILE)\ncommit"
+	@$(MAKE) testenv-runcmdJ CMD="configure\nload merge test/$(FILE)\ncommit"
 
 testenv-saveconfxml:
 	@if [ -z "$(FILE)" ]; then echo "FILE variable must be set"; false; fi
 	@echo "Saving configuration to $(FILE)"
 	docker exec -t $(CNT_PREFIX)-nso bash -lc "mkdir -p test/$(shell echo $(FILE) | xargs dirname)"
-	@$(MAKE) testenv-runcmd CMD="show configuration $(CONFPATH) | display xml | save test/$(FILE)"
+	@$(MAKE) testenv-runcmdJ CMD="show configuration $(CONFPATH) | display xml | save test/$(FILE)"
 	@docker cp $(CNT_PREFIX)-nso:test/$(FILE) $(FILE)
 
 .PHONY: all test build push tag-release push-release devenv-shell devenv-build devenv-start testenv-start testenv-test testenv-stop
