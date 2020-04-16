@@ -1,24 +1,64 @@
 
+import contextlib
 from functools import wraps
+from typing import Union
 
 import ncs
 import _ncs
 
 
-def hack_get_maagic_full_python_name(target_container: ncs.maagic.Container, node_name: str) -> str:
-    """Get the fully qualified python maagic node name within the target namespace.
+def hack_get_maagic_full_python_name(target_container: ncs.maagic.Container,
+                                     node_name: str) -> str:
+    """Get the fully qualified python maagic node name within the target
+    namespace.
 
     :param target_container: target maagic.Node (container / list entry)
     :param node_name: child node name
     :return: string name of node namespace__name
 
-    Sometimes when using the MAAGIC API, you need to know the fully qualified name of the node,
-    including the prefix, like ts__class. This happens if the node name is a reserved keyword, or
-    would collide with some other attribute. The evaluation is performed at runtime by the MAAGIC API.
+    Sometimes when using the MAAGIC API, you need to know the fully
+    qualified name of the node, including the prefix, like ts__class.
+    This happens if the node name is a reserved keyword, or would
+    collide with some other attribute. The evaluation is performed at
+    runtime by the MAAGIC API.
     """
     target_prefix = _ncs.ns2prefix(target_container._cs_node.ns()) # pylint: disable=no-member
     return target_container._children.full_python_name(target_prefix, str(node_name))
 
+def path_to_xpath(node_or_path: Union[str, ncs.maagic.Node]) -> str:
+    """Get the XPath to a node (keypath or maagic Node)
+
+    The input can be either:
+    - string keypath (/devices/device{foo}/config/alu:port...),
+    - maagic Node instance.
+    The helper will start a new MAAPI read transaction if necessary.
+
+    :param node_or_path: string keypath or Node instance
+    :returns: a string XPath to the node
+    """
+    with contextlib.ExitStack() as stack:
+        if isinstance(node_or_path, str):
+            # for a string input, we need a MAAPI session and read transaction
+            t_read = stack.enter_context(ncs.maapi.single_read_trans('python-path-to-xpath', 'system'))
+            t_read.pushd(node_or_path)
+        elif isinstance(node_or_path, ncs.maagic.Node):
+            # for a Node input, we first attempt to retrieve the backend transaction
+            try:
+                t_read = ncs.maagic.get_trans(node_or_path)
+            except ncs.maagic.BackendError:
+                try:
+                    # if there is no backend transaction, try to get the backend MAAPI
+                    # and start a new transaction
+                    maapi = ncs.maagic.get_maapi(node_or_path)
+                    t_read = stack.enter_context(maapi.start_read_trans())
+                except ncs.maagic.BackendError:
+                    # if the node has no compatible backend, we're back to square one
+                    # and need to set up MAAPI and read transaction
+                    t_read = stack.enter_context(ncs.maapi.single_read_trans('python-path-to-xpath', 'system'))
+            t_read.pushd(node_or_path._path)
+        xpath = _ncs.xpath_pp_kpath(t_read.getcwd_kpath())  # pylint: disable=no-member
+        t_read.popd()
+    return xpath
 
 def _maagic_copy_wrapper(fn):
     """Wrapper for the maagic_copy function, changes input maagic node and tracks recursion depth
@@ -216,7 +256,26 @@ def maagic_copy(a, b, service_copy=True, _is_first=True):
             # destination
             maagic_copy(src_le, dst_le, _is_first=False)
     elif isinstance(a, ncs.maagic.LeafList):
-        b.set_value(a.as_list())
+        # the target leaf-list is replaced with the source. first, remove
+        # all entries from the target.
+        b.delete()
+
+        # Most leaf-lists can be copied as python lists,
+        # like `b.set_value(a.as_list())`.
+        # If the leaf-list is of type instance-identifier, we need to work
+        # around some inconsistencies in the NSO MAAGIC API.
+        # Reading an instance-identifier type leaf will yield an
+        # HKeypathRef object.
+        # The same object cannot be used to write the value to the leaf -
+        # the written value *must* be an XPath string.
+        for c in a:
+            # Change key path string to XPath to work around the problem of
+            # leaf-list creating instance-identifier item
+            if isinstance(c, _ncs.HKeypathRef): # pylint: disable=no-member#
+                b.create(path_to_xpath(str(c)))
+            else:
+                b.set_value(a.as_list())
+                break
     else:
         raise ValueError("Can't copy leaf to leaf. {} ({})".format(a, type(a)))
         # we can't do this because we aren't actually passed the leaves but the
