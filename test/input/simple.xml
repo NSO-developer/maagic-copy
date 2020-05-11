@@ -8,6 +8,11 @@
             <a-list>
                 <name>list-entry-2</name>
             </a-list>
+            <string-list>A String</string-list>
+            <string-list>B String</string-list>
+            <string-list>String C</string-list>
+            <id-list xmlns:test-maagic-copy="http://example.com/test-maagic-copy">/test-maagic-copy:src/test-maagic-copy:simple/test-maagic-copy:a-list[test-maagic-copy:name='list-entry-1']</id-list>
+            <id-list xmlns:test-maagic-copy="http://example.com/test-maagic-copy">/test-maagic-copy:src/test-maagic-copy:simple/test-maagic-copy:a-list[test-maagic-copy:name='list-entry-2']</id-list>
             <a-container>
                 <another-leaf>another-string</another-leaf>
             </a-container>

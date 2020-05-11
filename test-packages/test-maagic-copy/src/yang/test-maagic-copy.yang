@@ -35,6 +35,14 @@ module test-maagic-copy {
         }
       }
 
+      leaf-list string-list {
+        type string;
+      }
+
+      leaf-list id-list {
+        type instance-identifier;
+      }
+
       container a-container {
         leaf another-leaf {
           type string;
