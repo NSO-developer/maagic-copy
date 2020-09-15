@@ -82,28 +82,34 @@ module test-maagic-copy {
           type string;
         }
       }
-    }
-  }
-
-  grouping when-container {
-    container test-when {
-      leaf condition {
-        type string;
-      }
-      leaf addition {
-        type empty;
-        when "../condition";
+      container test-when {
+        leaf condition {
+          type string;
+        }
+        leaf addition {
+          type empty;
+          when "../condition";
+        }
+        leaf condition2 {
+          type enumeration {
+            enum a;
+            enum b;
+            enum c;
+          }
+        }
+        leaf addition2 {
+          type empty;
+          when "../condition2 = 'a' or ../condition2 = 'b'";
+        }
       }
     }
   }
 
   container src {
     uses simple;
-    uses when-container;
   }
 
   container dst {
     uses simple;
-    uses when-container;
   }
 }
