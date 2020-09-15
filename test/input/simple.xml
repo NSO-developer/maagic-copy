@@ -16,7 +16,15 @@
             <a-container>
                 <another-leaf>another-string</another-leaf>
             </a-container>
+            <presence-container>
+                <x-coordinate>123.23445543</x-coordinate>
+                <y-coordinate>-23.23445543</y-coordinate>
+            </presence-container>
             <first-choice>my-first-choice</first-choice>
         </simple>
+        <test-when>
+            <condition>some condition</condition>
+            <addition/>
+        </test-when>
     </src>
 </config>

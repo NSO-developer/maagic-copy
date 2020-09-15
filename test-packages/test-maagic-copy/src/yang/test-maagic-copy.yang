@@ -49,6 +49,31 @@ module test-maagic-copy {
         }
       }
 
+      grouping presence-cont-grouping {
+        container presence-container {
+          leaf system {
+            type inet:uri;
+            default "IETF-2015 model";
+          }
+          leaf x-coordinate {
+            type decimal64 {
+              fraction-digits 16;
+            }
+          }
+          leaf y-coordinate {
+            type decimal64 {
+              fraction-digits 16;
+            }
+          }
+        }
+      }
+
+      uses presence-cont-grouping {
+        refine presence-container {
+          presence "Presence container";
+        }
+      }
+
       choice a-choice {
         leaf first-choice {
           type string;
@@ -60,11 +85,25 @@ module test-maagic-copy {
     }
   }
 
+  grouping when-container {
+    container test-when {
+      leaf condition {
+        type string;
+      }
+      leaf addition {
+        type empty;
+        when "../condition";
+      }
+    }
+  }
+
   container src {
     uses simple;
+    uses when-container;
   }
 
   container dst {
     uses simple;
+    uses when-container;
   }
 }
