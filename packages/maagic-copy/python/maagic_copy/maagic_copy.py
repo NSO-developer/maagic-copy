@@ -61,42 +61,30 @@ def path_to_xpath(node_or_path: Union[str, ncs.maagic.Node]) -> str:
     return xpath
 
 def _maagic_copy_wrapper(fn):
-    """Wrapper for the maagic_copy function, changes source and destination transaction flags
+    """Wrapper for the maagic_copy function, changes input maagic node and tracks recursion depth
 
-    The first two arguments to the maagic_copy function (source and destination
-    maagic nodes "a" and "b") will be replaced with maagic nodes referring to
-    the same nodes in the data tree, but with a nested MAAPI transaction. For
-    the source node a read-only trans-in-trans is started with the
-    FLAG_NO_DEFAULTS MAAPI flag set. This overrides the default behavior of NSO
-    of reading the default value if the leaf is empty and instead returns a
-    C_DEFAULT constant. For the destination node a read-write trans-in-trans is
-    started with FLAG_DELAYED_WHEN MAAPI flag set. This postpones the evaluation
-    of when expressions to the end of the transaction. It allows for example for
-    setting a leaf that would otherwise be "hidden" because the condition in the
-    when statement is not yet met.
+    The first argument to the maagic_copy function (source maagic node) will be replaced by
+    a maagic node referring to the same node in the data tree, but with a nested transaction
+    using a FLAG_NO_DEFAULTS MAAPI flag.
     """
 
     @wraps(fn)
     def wrapper(a, b, service_copy=True, _is_first=True):
         if _is_first:
-            # When maagic_copy is on the first level of recursion, set up the
-            # required MAAPI flags for source and destination nodes by:
-            #  1. starting a nested transaction using the original maagic object transaction,
-            #  2. setting the required MAAPI flag in nested transaction,
-            #  3. replacing the original maagic object with a new maagic object backed by the nested transaction
+            # When maagic_copy is on the first level of recursion, set MAAPI flag to allow us
+            # explicit default value detection with a `C_DEFAULT` value.
+            # This is done by:
+            #  1. starting a nested transaction using a's maagic object transaction,
+            #  2. setting the MAAPI flag in nested transaction,
+            #  3. replacing a with a new maagic object backed by the nested transaction
 
             src_trans = ncs.maagic.get_trans(a)
-            dst_trans = ncs.maagic.get_trans(b)
             with src_trans.start_trans_in_trans(ncs.READ) as src_tt:
                 src_tt.set_flags(_ncs.maapi.FLAG_NO_DEFAULTS)
                 a_tt = ncs.maagic.get_node(src_tt, a._path)
-                with dst_trans.start_trans_in_trans(ncs.READ_WRITE) as dst_tt:
-                    dst_tt.set_delayed_when(1)
-                    b_tt = ncs.maagic.get_node(dst_tt, b._path)
-                    fn(a_tt, b_tt, service_copy, _is_first=True)
-                    dst_tt.apply()
+                return fn(a_tt, b, service_copy, _is_first=True)
         else:
-            fn(a, b, service_copy, _is_first=False)
+            return fn(a, b, service_copy, _is_first=False)
     return wrapper
 
 
