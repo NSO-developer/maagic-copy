@@ -46,7 +46,7 @@ Dockerfile: Dockerfile.in $(wildcard includes/*)
 # would have to pass all the variables as build-args which makes this much
 # harder to do in a generic manner. This works across GNU and BSD awk.
 	cp Dockerfile.in Dockerfile
-	for DEP_NAME in $$(ls includes/); do export DEP_URL=$$(awk '{ print "echo", $$0 }' includes/$${DEP_NAME} | $(SHELL) -); awk "/DEP_END/ { print \"FROM $${DEP_URL} AS $${DEP_NAME}\" }; /DEP_INC_END/ { print \"COPY --from=$${DEP_NAME} /var/opt/ncs/packages/ /var/opt/ncs/packages/\" }; 1" Dockerfile > Dockerfile.tmp; mv Dockerfile.tmp Dockerfile; done
+	for DEP_NAME in $$(ls includes/); do export DEP_URL=$$(awk '{ print "echo", $$0 }' includes/$${DEP_NAME} | $(SHELL) -); awk "/DEP_END/ { print \"FROM $${DEP_URL} AS $${DEP_NAME}\" }; /DEP_INC_END/ { print \"COPY --from=$${DEP_NAME} /var/opt/ncs/packages/ /includes/\" }; 1" Dockerfile > Dockerfile.tmp; mv Dockerfile.tmp Dockerfile; done
 
 # Dockerfile is defined as a PHONY target which means it will always be rebuilt.
 # As the build of the Dockerfile relies on environment variables which we have
@@ -54,9 +54,10 @@ Dockerfile: Dockerfile.in $(wildcard includes/*)
 .PHONY: Dockerfile
 
 
-build: check-nid-available Dockerfile
-	docker build --target testnso -t $(IMAGE_PATH)$(PROJECT_NAME)/testnso:$(DOCKER_TAG) --build-arg NSO_IMAGE_PATH=$(NSO_IMAGE_PATH) --build-arg NSO_VERSION=$(NSO_VERSION) --build-arg PKG_FILE=$(IMAGE_PATH)$(PROJECT_NAME)/package:$(DOCKER_TAG) .
-	docker build --target package -t $(IMAGE_PATH)$(PROJECT_NAME)/package:$(DOCKER_TAG) --build-arg NSO_IMAGE_PATH=$(NSO_IMAGE_PATH) --build-arg NSO_VERSION=$(NSO_VERSION) --build-arg PKG_FILE=$(IMAGE_PATH)$(PROJECT_NAME)/package:$(DOCKER_TAG) .
+build: ensure-fresh-nid-available Dockerfile
+	docker build $(DOCKER_BUILD_CACHE_ARG) --target build -t $(IMAGE_PATH)$(PROJECT_NAME)/build:$(DOCKER_TAG) --build-arg NSO_IMAGE_PATH=$(NSO_IMAGE_PATH) --build-arg NSO_VERSION=$(NSO_VERSION) --build-arg PKG_FILE=$(IMAGE_PATH)$(PROJECT_NAME)/package:$(DOCKER_TAG) .
+	docker build $(DOCKER_BUILD_CACHE_ARG) --target testnso -t $(IMAGE_PATH)$(PROJECT_NAME)/testnso:$(DOCKER_TAG) --build-arg NSO_IMAGE_PATH=$(NSO_IMAGE_PATH) --build-arg NSO_VERSION=$(NSO_VERSION) --build-arg PKG_FILE=$(IMAGE_PATH)$(PROJECT_NAME)/package:$(DOCKER_TAG) .
+	docker build $(DOCKER_BUILD_CACHE_ARG) --target package -t $(IMAGE_PATH)$(PROJECT_NAME)/package:$(DOCKER_TAG) --build-arg NSO_IMAGE_PATH=$(NSO_IMAGE_PATH) --build-arg NSO_VERSION=$(NSO_VERSION) --build-arg PKG_FILE=$(IMAGE_PATH)$(PROJECT_NAME)/package:$(DOCKER_TAG) .
 
 push:
 	docker push $(IMAGE_PATH)$(PROJECT_NAME)/package:$(DOCKER_TAG)
@@ -73,61 +74,61 @@ dev-shell:
 
 # Test environment targets
 
+# testenv-start: start the test environment in a configuration that allows
+# Python Remote Debugging. Exposes port 5678 on a random port on localhost.
 testenv-start:
 	docker network inspect $(CNT_PREFIX) >/dev/null 2>&1 || docker network create $(CNT_PREFIX)
 	docker run -td --name $(CNT_PREFIX)-nso --network-alias nso $(DOCKER_NSO_ARGS) -e ADMIN_PASSWORD=NsoDocker1337 $${NSO_EXTRA_ARGS} $(IMAGE_PATH)$(PROJECT_NAME)/testnso:$(DOCKER_TAG)
 	$(MAKE) testenv-start-extra
-	docker exec -t $(CNT_PREFIX)-nso bash -lc 'ncs --wait-started 600'
+	$(MAKE) testenv-wait-started-nso
 
-# testenv-build - recompiles and loads new packages in NSO
-# Compilation happens in a cisco-nso-dev container that attaches up the running
-# containers package directory as a volume. The source files are then copied
-# over using rsync. The rsync operation is analyzed (by looking at the log) to
-# determine what files were updated and based on that either reload all package
-# or selectively redeploy individual packages. ENG-20488, released in NSO 5.3,
-# made large improvements to package redeploy, before it, changes configuration
-# template required a package reload. We take this into account by first looking
-# at the NSO version. Note how the package name can be different from the
-# package directory name, thus we use xmlstarlet to get the package name from
-# package-meta-data.xml. A full package reload can be forced by setting
-# PACKAGE_RELOAD to anything non-empty.
-#
-# build-meta-data.xml is also generated for packages that do not ship / build
-# one themselves. Note how NSO only reads in build-meta-data.xml on package
-# *reload*. A package *redeploy* will thus lead to a stale view in NSO.
-SUPPORTS_NEW_REDEPLOY=$(shell if [ $(NSO_VERSION_MAJOR) -gt 5 ] || [ $(NSO_VERSION_MAJOR) -eq 5 -a $(NSO_VERSION_MINOR) -ge 3 ]; then echo "true"; fi)
-ifeq ($(SUPPORTS_NEW_REDEPLOY),true)
-RELOAD_PATTERN="(package-meta-data.xml|\.cli$$|\.yang$$)"
-else
-RELOAD_PATTERN="(package-meta-data.xml|templates/.*\.xml$$|\.cli$$|\.yang$$)"
-endif
+# testenv-dap-port: get the host port mapping for the DAP daemon in the container
+testenv-dap-port:
+	@docker inspect -f '{{(index (index .NetworkSettings.Ports "5678/tcp") 0).HostPort}}' $(CNT_PREFIX)-nso$(NSO)
+
+# testenv-debug-vscode: modifies VSCode launch.json to connect the python remote
+# debugger to the environment. Existing contents of the file are preserved.
+# First check if the file exists, and if not, create a valid empty file. Next
+# check if "Python: NID Remote Attach" debug config is present. If yes, update
+# it, otherwise add a new one.
+testenv-debug-vscode:
+	@if [ ! -f .vscode/launch.json ]; then \
+		mkdir -p .vscode; \
+		echo '{"version": "0.2.0","configurations":[]}' > .vscode/launch.json; \
+		echo "== Created .vscode/launch.json"; \
+	fi; \
+	HOST_PORT=$$($(MAKE) --no-print-directory testenv-dap-port); \
+	LAUNCH_NO_COMMENTS=`sed '/\s*\/\/.*/d' .vscode/launch.json`; \
+	if ! echo $${LAUNCH_NO_COMMENTS} | jq --exit-status "(.configurations[] | select(.name == \"Python: NID Remote Attach\"))" >/dev/null 2>&1; then \
+		echo $${LAUNCH_NO_COMMENTS} | jq '.configurations += [{"name":"Python: NID Remote Attach","type":"python","request":"attach","port":'"$${HOST_PORT}"',"host":"localhost","pathMappings":[{"localRoot":"$${workspaceFolder}/packages","remoteRoot":"/nso/run/state/packages-in-use.cur/1"}]}]' > .vscode/launch.json; \
+		echo "== Added \"Python: NID Remote Attach\" debug configuration"; \
+	else \
+		echo $${LAUNCH_NO_COMMENTS} | jq "(.configurations[] | select(.name == \"Python: NID Remote Attach\") | .port) = $${HOST_PORT}" > .vscode/launch.json; \
+		echo "== Updated .vscode/launch.json for Python remote debugging"; \
+	fi
+
+# testenv-build - incrementally recompile and load new packages in running NSO
+# See the nid/testenv-build script for more details.
 testenv-build:
 	for NSO in $$(docker ps --format '{{.Names}}' --filter label=$(CNT_PREFIX) --filter label=nidtype=nso); do \
 		echo "-- Rebuilding for NSO: $${NSO}"; \
-		mkdir -p tmp && \
-		docker run -it --rm -v $(PWD):/src --volumes-from $${NSO} -e PKG_FILE=$(IMAGE_PATH)$(PROJECT_NAME)/package:$(DOCKER_TAG) $(NSO_IMAGE_PATH)cisco-nso-dev:$(NSO_VERSION) bash -lc 'rsync -aEim /src/packages/. /src/test-packages/. /var/opt/ncs/packages/ > /src/tmp/rsync.log; chown $$(stat -c "%u:%g" /src/tmp) /src/tmp/rsync.log 2>/dev/null; for PKG_DIR in $$(find /src/packages /src/test-packages -mindepth 1 -maxdepth 1 -type d); do export PKG_NAME=$$(basename $${PKG_DIR}); make -C /var/opt/ncs/packages/$${PKG_NAME}/src; OUTPUT_PATH=/var/opt/ncs/packages/$${PKG_NAME}/ make -f /src/nid/bmd.mk -C $${PKG_DIR} build-meta-data.xml; done' && \
-		egrep $(RELOAD_PATTERN) tmp/rsync.log >/dev/null; if [ $$? -eq 0 ] || [ -n "$$PACKAGE_RELOAD" ]; then \
-			echo "-- Reloading packages for NSO $${NSO}"; \
-			$(MAKE) testenv-runcmdJ CMD="request packages reload force"; \
-		else \
-			for PKG in $$(sed 's,^[^ ]\+ \([^/]\+\).*,\1,' tmp/rsync.log | sort | uniq); do \
-				echo "-- Redeploying package $${PKG} for NSO $${NSO}"; \
-				PMD_FILE=$$(ls packages/$${PKG}/package-meta-data.xml packages/$${PKG}/src/package-meta-data.xml.in test-packages/$${PKG}/package-meta-data.xml test-packages/$${PKG}/src/package-meta-data.xml.in 2>/dev/null | head -n1); \
-				PKG_NAME=$$(xmlstarlet sel -N x=http://tail-f.com/ns/ncs-packages -t -v "/x:ncs-package/x:name" -nl $${PMD_FILE}) && \
-				$(MAKE) testenv-runcmdJ CMD="request packages package $${PKG_NAME} redeploy"; \
-			done; \
-		fi; \
-		rm -rf tmp; \
+		docker run -it --rm -v $(PWD):/src --volumes-from $${NSO} --network=container:$${NSO} -e NSO=$${NSO} -e PACKAGE_RELOAD=$(PACKAGE_RELOAD) -e SKIP_LINT=$(SKIP_LINT) -e PKG_FILE=$(IMAGE_PATH)$(PROJECT_NAME)/package:$(DOCKER_TAG) $(NSO_IMAGE_PATH)cisco-nso-dev:$(NSO_VERSION) /src/nid/testenv-build; \
 	done
 
 # testenv-clean-build - clean and rebuild from scratch
 # We rsync (with --delete) in sources, which effectively is a superset of 'make
 # clean' per package, as this will delete any built packages as well as removing
-# old sources files that no longer exist.
+# old sources files that no longer exist. It also removes included packages and
+# as we don't have those in the source repository, we must bring them in from
+# the build container image where we previously pulled them in into the
+# /includes directory. We start up the build image and copy the included
+# packages to /var/opt/ncs/packages/ folder.
 testenv-clean-build:
 	for NSO in $$(docker ps --format '{{.Names}}' --filter label=$(CNT_PREFIX) --filter label=nidtype=nso); do \
 		echo "-- Cleaning NSO: $${NSO}"; \
 		docker run -it --rm -v $(PWD):/src --volumes-from $${NSO} $(NSO_IMAGE_PATH)cisco-nso-dev:$(NSO_VERSION) bash -lc 'rsync -aEim --delete /src/packages/. /src/test-packages/. /var/opt/ncs/packages/ >/dev/null'; \
+		echo "-- Copying in pristine included packages for NSO: $${NSO}"; \
+		docker run -it --rm --volumes-from $${NSO} $(IMAGE_PATH)$(PROJECT_NAME)/build:$(DOCKER_TAG) cp -a /includes/. /var/opt/ncs/packages/; \
 	done
 	@echo "-- Done cleaning, rebuilding with forced package reload..."
 	$(MAKE) testenv-build PACKAGE_RELOAD="true"
@@ -150,6 +151,33 @@ testenv-cli:
 
 testenv-runcmdC testenv-runcmdJ:
 	@if [ -z "$(CMD)" ]; then echo "CMD variable must be set"; false; fi
-	docker exec -t $(CNT_PREFIX)-nso$(NSO) bash -lc 'echo -e "$(CMD)" | ncs_cli -$(subst testenv-runcmd,,$@)u admin'
+	docker exec -t $(CNT_PREFIX)-nso$(NSO) bash -lc 'echo -e "$(CMD)" | ncs_cli --noninteractive --stop-on-error -$(subst testenv-runcmd,,$@)u admin'
 
-.PHONY: all build dev-shell push push-release tag-release test testenv-build testenv-clean-build testenv-start testenv-stop testenv-test
+# Wait for all NSO instances in testenv to start up, as determined by `ncs
+# --wait-started`, or display the docker log for the first failed NSO instance.
+testenv-wait-started-nso:
+	@for NSO in $$(docker ps --format '{{.Names}}' --filter label=$(CNT_PREFIX) --filter label=nidtype=nso); do \
+		docker exec -t $${NSO} bash -lc 'ncs --wait-started 600' || (echo "NSO instance $${NSO} failed to start in 600 seconds, displaying logs:"; docker logs $${NSO}; exit 1); \
+		echo "NSO instance $${NSO} has started"; \
+	done; \
+	echo "All NSO instance have started"
+
+# Find all NSO containers using the nidtype=nso and CNT_PREFIX labels, then
+# save logs from /log. For all containers (NSO inclusive) save docker logs.
+testenv-save-logs:
+	@for nso in $$(docker ps -a --filter label=nidtype=nso --filter label=$(CNT_PREFIX) --format '{{.Names}}'); do \
+		NSO_SUFFIX=$$(echo $${nso} | sed "s/$(CNT_PREFIX)-//"); \
+		echo "== Collecting NSO logs from $${NSO_SUFFIX}"; \
+		mkdir -p $${NSO_SUFFIX}-logs; \
+		docker exec $${nso} bash -lc 'ncs --debug-dump /log/debug-dump'; \
+		docker exec $${nso} bash -lc 'ncs --printlog /log/ncserr.log > /log/ncserr.log.txt'; \
+		docker cp $${nso}:/log $${NSO_SUFFIX}-logs; \
+	done
+	@for c in $$(docker ps -a --filter label=$(CNT_PREFIX) --format '{{.Names}}'); do \
+		mkdir -p docker-logs; \
+		echo "== Collecting docker logs from $${c}"; \
+		docker logs $${c} > docker-logs/$${c} 2>&1; \
+	done
+
+
+.PHONY: all build dev-shell push push-release tag-release test testenv-build testenv-clean-build testenv-start testenv-stop testenv-test testenv-wait-started-nso testenv-save-logs

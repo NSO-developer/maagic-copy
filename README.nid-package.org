@@ -158,6 +158,40 @@
 ** Skeleton source location and updating the skeleton
    The authoritative origin for the standard form NID package skeleton is the =nso-docker= repository at [[https://gitlab.com/nso-developer/nso-docker/]], specifically in the directory =skeletons/package=. To upgrade to a later version of the skeleton, pull the files from that location and avoid touching the =Makefile= as it typically contains custom modifications. Be sure to include files starting with a dot (=.=).
 
+* Python dependencies & virtualenv
+  If you are using Python for your NSO package and depend on external Python packages, you should declare them in =src/requirements.txt=. The NSO in Docker build system will automatically build a Python virtualenv based on the =requirements.txt= file. The virtualenv is placed in =pyvenv/=.
+
+  At run time, NSO in Docker will automatically detect a Python virtualenv and if found, activate that virtualenv before starting the Python VM. The path to the virtualenv is hardcoded relative to the NSO package =${PKG_PATH}/pyvenv=.
+
+  Note that the each NSO package runs in its own Python VM and will not have access to the Python environment of another NSO package, for example:
+  - NSO package =A= depends on external Python package =foo=
+    - =foo= is installed in the pyvenv in package =A=
+  - NSO package =B= imports Python modules from package =A=
+  - NSO package =B= will not have access to the Python package =foo= in the pyvenv in package =A=
+  - =foo= will need to be installed in pyvenv of =A= as well, by specifying it in the =requirements.txt= file
+
+  =src/requirements-dev.txt= can be populated with build time dependencies. The NSO in Docker build system will automatically build a Python virtualenv in =pyvenv-dev/= based on the content of =src/requirements-dev.txt=. This is only activated in the build process and =pyvenv-dev/= is not included in the final artifact, reducing its size. It is highly recommended to let the build time dependencies be a superset of run time dependencies by including =requirements.txt= from =requirements-dev.txt=:
+  #+BEGIN_SRC text
+    -r requirements.txt
+  #+END_SRC
+
+* Python Remote Debugging
+  If your packages contain Python code, you can connect a remote debugger to individual Python VMs. The base NSO in Docker images include [[https://github.com/microsoft/debugpy]] which implements the Debug Adapter Protocol. Any compatible DAP client may attach the process on the exposed port (tcp/5678). In VSCode the =Python= extension available at [[https://marketplace.visualstudio.com/items?itemName=ms-python.python]] provides the functionality. The NSO containers started by the skeleton Makefiles will automatically expose the port on a high-numbered port assigned by the docker engine.
+
+  If you want to debug a Python package set the =DEBUGPY= environment variable to the NSO package name when starting the testenv. For example, if your package is called =testpy-package=, you start the environment with ~DEBUGPY=testpy-package make testenv-start~. If the =DEBUGPY= variable is set to an empty value or the package is not found at startup, debugging is disabled altogether. To start debugging use one of the provided DAP-client targets:
+  - =testenv-debug-vscode=: will create/update debug configuration in =.vscode/launch.json= as described at [[https://code.visualstudio.com/docs/python/debugging#_remote-script-debugging-with-ssh]]
+
+  Warning: at the moment debugging a Python package that uses the Python =multiprocessing= library, like the =bgworker= package, is not supported. Attempting to start the PythonVM in remote debug mode will prevent any background process from running until the remote debugger is attached.
+
+  NSO expects a service callback to complete in under 2 minutes (default setting). When stepping through the code with a debugger, execution is paused and if not stepped through fast enough, NSO will time out waiting for the callback. You can extend this timeout in the =java-vm= settings with the following configuration (the Java setting applies to Python callbacks as well):
+  #+BEGIN_SRC xml
+  <java-vm xmlns="http://tail-f.com/ns/ncs">
+    <service-transaction-timeout>600</service-transaction-timeout>
+  </java-vm>
+  #+END_SRC
+
+  Note: the value of the =DEBUGPY= variable specifies the Python VM name. Usually this is the name of the NSO package as defined in =package-meta-data.xml=. It may differ from the package directory name. If the name of the Python VM was overriden in =package-meta-data.xml= you must use the actual name.
+
 * Continuous mirroring
   In the NSO in Docker (NID) ecosystem, you are encouraged to mirror repositories that you use. If you found this repository outside of your own git hosting system, you should mirror it to your own git host for it to be built there by your own CI system.
 
