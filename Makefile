@@ -22,8 +22,7 @@ testenv-start-extra:
 
 testenv-test:
 	@echo "-- Cleaning out test data from CDB"
-	$(MAKE) testenv-runcmdJ CMD="configure\n delete src\n commit"
-	$(MAKE) testenv-runcmdJ CMD="configure\n delete dst\n commit"
+	$(MAKE) testenv-runcmdJ CMD="configure\n delete src\n delete dst\n commit"
 	@echo "-- Loading test data"
 	$(MAKE) testenv-loadconf FILE="test/input/simple.xml"
 	@echo "-- Running maagic_copy(src, dst)"
