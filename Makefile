@@ -36,6 +36,8 @@ testenv-test:
 	xmlstarlet edit -O -N c=http://tail-f.com/ns/config/1.0 -N x=http://example.com/test-maagic-copy --move "/c:config/x:dst/x:simple" "/" --delete "/c:config" test/output/simple-dst.xml > test/output/simple-mangled-dst.xml
 	@echo "-- Comparing src to dst"
 	diff -u test/output/simple-mangled-src.xml test/output/simple-mangled-dst.xml
+	@echo "-- Executing /test-action"
+	$(MAKE) testenv-runcmdJ CMD="request src test-action simple { test-when { condition foo condition2 a addition addition2 } } | display xml" | grep addition2
 
 
 testenv-loadconf:

@@ -7,4 +7,11 @@
   <required-package>
       <name>maagic-copy</name>
   </required-package>
+
+  <component>
+    <name>test-action</name>
+    <application>
+      <python-class-name>test_maagic_copy.main.AppComponent</python-class-name>
+    </application>
+  </component>
 </ncs-package>

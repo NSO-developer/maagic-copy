@@ -1,4 +1,5 @@
 module test-maagic-copy {
+  yang-version "1.1";
 
   namespace "http://example.com/test-maagic-copy";
   prefix test-maagic-copy;
@@ -107,6 +108,15 @@ module test-maagic-copy {
 
   container src {
     uses simple;
+    action test-action {
+      tailf:actionpoint "test-action";
+      input {
+        uses simple;
+      }
+      output {
+        uses simple;
+      }
+    }
   }
 
   container dst {
