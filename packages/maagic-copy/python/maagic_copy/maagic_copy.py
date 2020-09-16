@@ -65,7 +65,10 @@ def _maagic_copy_wrapper(fn):
 
     The first argument to the maagic_copy function (source maagic node) will be replaced by
     a maagic node referring to the same node in the data tree, but with a nested transaction
-    using a FLAG_NO_DEFAULTS MAAPI flag.
+    using a FLAG_NO_DEFAULTS MAAPI flag. This is only done for nodes backed by a transaction.
+
+    The underlying MAAPI transaction of the destination maagic node is also temporarily modified
+    to postpone when statement evaluations. The original state is restored before exiting.
     """
 
     @wraps(fn)
@@ -78,13 +81,28 @@ def _maagic_copy_wrapper(fn):
             #  2. setting the MAAPI flag in nested transaction,
             #  3. replacing a with a new maagic object backed by the nested transaction
 
-            src_trans = ncs.maagic.get_trans(a)
-            with src_trans.start_trans_in_trans(ncs.READ) as src_tt:
-                src_tt.set_flags(_ncs.maapi.FLAG_NO_DEFAULTS)
-                a_tt = ncs.maagic.get_node(src_tt, a._path)
-                return fn(a_tt, b, service_copy, _is_first=True)
+            # Set delayed-when for the destination transaction. The original
+            # value is restored after maagic-copy is done.
+            try:
+                dst_trans = ncs.maagic.get_trans(b)
+                orig_delayed_when = dst_trans.set_delayed_when(1)
+            except ncs.maagic.BackendError:
+                orig_delayed_when = None
+
+            with contextlib.ExitStack() as stack:
+                try:
+                    src_trans = ncs.maagic.get_trans(a)
+                    src_tt = stack.enter_context(src_trans.start_trans_in_trans(ncs.READ))
+                    src_tt.set_flags(_ncs.maapi.FLAG_NO_DEFAULTS)
+                    a_tt = ncs.maagic.get_node(src_tt, a._path)
+                except ncs.maagic.BackendError:
+                    a_tt = a
+                fn(a_tt, b, service_copy, _is_first=True)
+
+            if orig_delayed_when is not None:
+                dst_trans.set_delayed_when(orig_delayed_when)
         else:
-            return fn(a, b, service_copy, _is_first=False)
+            fn(a, b, service_copy, _is_first=False)
     return wrapper
 
 
@@ -98,6 +116,10 @@ def maagic_copy(a, b, service_copy=True, _is_first=True):
         meta-data NCS structures that must not be copied. The service_copy flag is used to control
         this behaviour. When set to True, nodes listed in the service_model_blacklist list will be
         skipped.
+
+        Note: the function uses maapi.set_delayed_when(1) on the destination (b)
+        node transaction. This is done to postpone when statement evaluation
+        until transaction VALIDATE phase. The change is *not* reverted.
 
         :param a: source MAAGIC node
         :param b: destination MAAGIC node
