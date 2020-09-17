@@ -21,10 +21,12 @@
                 <y-coordinate>-23.23445543</y-coordinate>
             </presence-container>
             <first-choice>my-first-choice</first-choice>
+            <test-when>
+                <condition>some condition</condition>
+                <addition/>
+                <condition2>b</condition2>
+                <addition2/>
+            </test-when>
         </simple>
-        <test-when>
-            <condition>some condition</condition>
-            <addition/>
-        </test-when>
     </src>
 </config>

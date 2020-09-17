@@ -1,4 +1,5 @@
 module test-maagic-copy {
+  yang-version "1.1";
 
   namespace "http://example.com/test-maagic-copy";
   prefix test-maagic-copy;
@@ -82,28 +83,43 @@ module test-maagic-copy {
           type string;
         }
       }
-    }
-  }
-
-  grouping when-container {
-    container test-when {
-      leaf condition {
-        type string;
-      }
-      leaf addition {
-        type empty;
-        when "../condition";
+      container test-when {
+        leaf condition {
+          type string;
+        }
+        leaf addition {
+          type empty;
+          when "../condition";
+        }
+        leaf condition2 {
+          type enumeration {
+            enum a;
+            enum b;
+            enum c;
+          }
+        }
+        leaf addition2 {
+          type empty;
+          when "../condition2 = 'a' or ../condition2 = 'b'";
+        }
       }
     }
   }
 
   container src {
     uses simple;
-    uses when-container;
+    action test-action {
+      tailf:actionpoint "test-action";
+      input {
+        uses simple;
+      }
+      output {
+        uses simple;
+      }
+    }
   }
 
   container dst {
     uses simple;
-    uses when-container;
   }
 }
