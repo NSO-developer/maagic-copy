@@ -135,7 +135,8 @@ def maagic_copy(a, b, service_copy=True, _is_first=True):
         ('device-list', ncs.maagic.LeafList),               # service-impacted-devices
         ('used-by-customer-service', ncs.maagic.LeafList),  # service-customer-service
         ('commit-queue', ncs.maagic.Container),             # service-commit-queue
-        ('log', ncs.maagic.Container)                       # log-data
+        ('log', ncs.maagic.Container),                      # log-data
+        ('plan', ncs.maagic.Container)                      # plan data
     ]
 
     if type(a) in (ncs.maagic.Case,                         # pylint: disable=unidiomatic-typecheck
