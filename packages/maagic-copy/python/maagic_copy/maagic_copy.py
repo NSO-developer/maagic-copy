@@ -7,6 +7,22 @@ import ncs
 import _ncs
 
 
+# NSO 5.7 introduced a change in the maagic API internals - the
+# ncs.childlist._ChildList no longer implements __getitem__(item). It is still
+# possible to use the get_by_py(name) method, but its signature has changed in
+# 5.7 too. In the new version it also needs the transaction and parent object -
+# get_by_py(trans, parent, name)
+# TODO: maybe there is a better way of doing this (retrieving the node
+# children) altogether?
+if ncs.LIB_VSN_STR >= '07070000':
+    def compat_get_child(obj, py_name):
+        return obj._children.get_by_py(obj._backend, obj, py_name)
+else:
+    def compat_get_child(obj, py_name):
+        return obj._children[py_name]
+
+ncs.maagic.Node.compat_get_child = compat_get_child
+
 def hack_get_maagic_full_python_name(target_container: ncs.maagic.Container,
                                      node_name: str) -> str:
     """Get the fully qualified python maagic node name within the target
@@ -152,7 +168,7 @@ def maagic_copy(a, b, service_copy=True, _is_first=True):
         # do not overwrite List keys on target. failure to do so leads to weird changes detection
         if isinstance(b, ncs.maagic.ListElement):
             list_keys = [child for child in dir(b)
-                         if not child.startswith('__') and b._children[child]._cs_node.is_key()]
+                         if not child.startswith('__') and b.compat_get_child(child)._cs_node.is_key()]
         else:
             list_keys = []
 
@@ -160,7 +176,7 @@ def maagic_copy(a, b, service_copy=True, _is_first=True):
             if attr_name.startswith('__') or attr_name in list_keys:
                 continue
 
-            src_node = a._children[attr_name]
+            src_node = a.compat_get_child(attr_name)
 
             if isinstance(src_node, ncs.maagic.Action):
                 continue
@@ -171,7 +187,7 @@ def maagic_copy(a, b, service_copy=True, _is_first=True):
                     continue
 
             try:
-                dst_node = b._children[attr_name]
+                dst_node = b.compat_get_child(attr_name)
             except KeyError:
                 # the node likely doesn't exist on the target, except if it has a different
                 # Python name because of a forbidden word.
@@ -181,7 +197,7 @@ def maagic_copy(a, b, service_copy=True, _is_first=True):
                     # assume the target node has the same namespace as the parent
                     attr_name = hack_get_maagic_full_python_name(b, src_node)
                     try:
-                        dst_node = b._children[attr_name]
+                        dst_node = b.compat_get_child(attr_name)
                     except KeyError:
                         # just skip to next one if destination doesn't exist
                         continue
