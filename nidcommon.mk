@@ -74,7 +74,19 @@ ifeq ($(NSO_VERSION),)
 $(error "ERROR: variable NSO_VERSION must be set, for example to '5.2.1' to build based on NSO version 5.2.1")
 endif
 NSO_VERSION_MAJOR=$(word 1,$(subst ., ,$(NSO_VERSION)))
-NSO_VERSION_MINOR=$(word 2,$(subst ., ,$(NSO_VERSION)))
+NSO_VERSION_MINOR=$(word 2,$(subst ., ,$(subst _, ,$(NSO_VERSION))))
+
+# Determine our project name, either from CI_PROJECT_NAME which is normally set
+# by GitLab CI or by looking at the name of our directory (that we are in).
+ifneq ($(CI_PROJECT_NAME),)
+PROJECT_NAME=$(CI_PROJECT_NAME)
+else
+PROJECT_NAME:=$(shell basename $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST)))))
+endif
+
+# Determine our project directory by taking the absolute path of the last
+# makefile in $(MAKEFILE_LIST) - this makefile ("nidcommon.mk").
+PROJECT_DIR:=$(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 
 # Set PNS - our pseudo-namespace or pipeline namespace. All containers running
 # within a CI pipeline will have the same namespace, which isn't a namespace
@@ -90,7 +102,7 @@ endif
 
 # set the docker tag to use, if not already set
 DOCKER_TAG?=$(NSO_VERSION)-$(PNS)
-CNT_PREFIX?=testenv-$(PROJECT_NAME)-$(NSO_VERSION)-$(PNS)
+CNT_PREFIX?=testenv-$(PROJECT_NAME)-$(TESTENV)-$(NSO_VERSION)-$(PNS)
 
 # There are three important paths that we provide:
 # - NSO_IMAGE_PATH is the path to where we can find the standard nso-docker images
@@ -112,9 +124,10 @@ endif
 # the test environment.
 # DOCKER_NSO_ARGS contains additional arguments specific to an NSO container.
 # This includes exposing tcp/5678 for Python Remote Debugging using debugpy.
-DOCKER_ARGS=--network $(CNT_PREFIX) --label $(CNT_PREFIX)
+DOCKER_LABEL_ARG?=--label com.cisco.nso.testenv.name=$(CNT_PREFIX)
+DOCKER_ARGS=--network $(CNT_PREFIX) $(DOCKER_LABEL_ARG)
 # DEBUGPY?=$(PROJECT_NAME)
-DOCKER_NSO_ARGS=$(DOCKER_ARGS) --label nidtype=nso --volume /var/opt/ncs/packages -e DEBUGPY=$(DEBUGPY) --expose 5678 --publish-all
+DOCKER_NSO_ARGS=$(DOCKER_ARGS) --label com.cisco.nso.testenv.type=nso --volume /var/opt/ncs/packages -e DEBUGPY=$(DEBUGPY) --expose 5678 --publish-all
 
 # Determine which xargs we have. BSD xargs does not have --no-run-if-empty,
 # rather, it is the default behavior so the argument is simply superfluous. We
@@ -128,7 +141,7 @@ else
 	XARGS := xargs
 endif
 
-# If we are running in CI and on the default branch (typically 'master'),
+# If we are running in CI and on the default branch (like 'main' or 'master'),
 # disable the build cache for docker builds. We do this with ?= operator in make
 # so we only set DOCKER_BUILD_CACHE_ARG if it is not already set, this makes it
 # possible to still use the cache if explicitly set through environment
@@ -175,4 +188,5 @@ ensure-fresh-nid-available:
 							echo "$(NSO_IMAGE_PATH)" | grep "/$$" >/dev/null || echo "HINT: did you forget a trailing '/' in NSO_IMAGE_PATH?"; \
 							echo "HINT: Is NSO_IMAGE_PATH correctly set? Set NSO_IMAGE_PATH to the registry URL of the nso-docker repo, for example 'registry.gitlab.com/nso-developer/nso-docker/'"; \
 							false); \
+				docker pull $(NSO_IMAGE_PATH)cisco-nso-dev:$(NSO_VERSION) 2>/dev/null; \
 			fi)
